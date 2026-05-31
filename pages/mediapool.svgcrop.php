@@ -118,6 +118,12 @@ try {
     $title = sprintf(rex_i18n::msg('svgcrop_media_crop_title'), pathinfo($media->getFileName(), PATHINFO_FILENAME));
 
     $canOverwrite = $user->hasPerm('svgcrop[overwrite]');
+    $canSvgEdit = $user->hasPerm('svgcrop[svg_edit]');
+    $defaultSvgEditUrl = rex_addon::get('svgcrop')->getAssetsUrl('vendor/svgedit/index.html');
+    $svgEditUrl = trim((string) rex_config::get('svgcrop', 'svg_edit_url', $defaultSvgEditUrl));
+    if ('' === $svgEditUrl || 'https://unpkg.com/svgedit@latest/dist/editor/index.html' === $svgEditUrl) {
+        $svgEditUrl = $defaultSvgEditUrl;
+    }
     $fileBaseName = pathinfo($media->getFileName(), PATHINFO_FILENAME);
 
     $catsSel = new rex_media_category_select();
@@ -168,9 +174,11 @@ try {
         . '<div class="form-inline" style="margin-bottom:10px">'
         . '<button type="button" class="btn btn-default" id="svgcrop-optimize-button">' . rex_i18n::msg('svgcrop_optimize_button') . '</button> '
         . '<button type="button" class="btn btn-default" id="svgcrop-trim-button">' . rex_i18n::msg('svgcrop_trim_button') . '</button> '
+        . ($canSvgEdit ? '<button type="button" class="btn btn-default" id="svgcrop-open-svg-edit" data-svgedit-url="' . rex_escape($svgEditUrl) . '">' . rex_i18n::msg('svgcrop_svg_edit_button') . '</button> ' : '')
         . '<label for="svgcrop-trim-padding" style="margin-left:8px">' . rex_i18n::msg('svgcrop_trim_padding') . '</label> '
         . '<input type="number" class="form-control" id="svgcrop-trim-padding" value="0" step="0.5" style="width:90px" />'
         . '</div>'
+        . ($canSvgEdit ? '<p class="help-block">' . rex_i18n::msg('svgcrop_svg_edit_notice') . '</p>' : '')
         . '<div id="svgcrop-preview" style="height:50vh;max-height:50vh;overflow:hidden;display:flex;align-items:center;justify-content:center;border:1px solid #d7d7d7;padding:10px;background:#fff"></div>'
         . '<p class="help-block" id="svgcrop-status"></p>'
         . '</div></div>';

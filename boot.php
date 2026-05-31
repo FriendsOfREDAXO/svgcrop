@@ -7,6 +7,7 @@ $user = rex::getUser();
 if (rex::isBackend() && $user instanceof rex_user) {
     rex_perm::register('svgcrop[]');
     rex_perm::register('svgcrop[overwrite]');
+    rex_perm::register('svgcrop[svg_edit]');
 }
 
 if (!function_exists('svgcrop_is_supported_media')) {

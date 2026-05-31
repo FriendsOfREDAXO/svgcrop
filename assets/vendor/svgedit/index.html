@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge, chrome=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <!-- No-op until loaded dynamically (could make configurable) -->
+  <link rel="icon" href="images/logo.svg">
+  <!-- STYLESHEETS (others loaded dynamically) -->
+  <style id="styleoverrides" media="screen"></style>
+  <link href="./svgedit.css" rel="stylesheet" media="all">
+  </link>
+  <!-- Lacking browser support -->
+  <script type="module" src="./browser-not-supported.js"></script>
+  <title>SVG-edit</title>
+</head>
+
+<body style="margin:0">
+  <!-- svgedit container can be positionned anywhere in the DOM
+       but it must have a width and a height -->
+  <!--
+  <h1>SVGEdit</h1>
+  <div id="container" style="width:100%;height:550px"></div>
+  <h1>End</h1>
+  -->
+  <div id="container" style="width:100%;height:100vh"></div>
+</body>
+<!-- If you do not wish to add extensions by URL, you can add calls
+      within the following file to svgEditor.setConfig -->
+<script type="module">
+  import Editor from './Editor.js'
+
+  const params = new URLSearchParams(window.location.search)
+  const svgcropStorageKey = params.get('svgcropStorageKey')
+  const svgcropFallbackKey = 'svgcrop:svgedit:latest'
+  const svgcropReturnKey = params.get('svgcropReturnKey')
+  const svgcropReturnUrl = params.get('svgcropReturnUrl')
+  const svgcropEmbed = params.get('svgcropEmbed') === '1'
+
+  const buildReturnButton = (svgEditor) => {
+    if (!svgcropReturnKey) {
+      return
+    }
+
+    const button = document.createElement('button')
+    button.type = 'button'
+    button.textContent = svgcropEmbed ? 'Übernehmen in SVG-Crop' : 'Zurück zu SVG-Crop'
+    button.style.position = 'fixed'
+    button.style.right = '16px'
+    button.style.top = '16px'
+    button.style.zIndex = '9999'
+    button.style.padding = '8px 12px'
+    button.style.border = '1px solid #3b82f6'
+    button.style.borderRadius = '6px'
+    button.style.background = '#2563eb'
+    button.style.color = '#fff'
+    button.style.font = '600 12px/1.2 system-ui, sans-serif'
+    button.style.cursor = 'pointer'
+
+    button.addEventListener('click', () => {
+      try {
+        const content = svgEditor.svgCanvas.getSvgString()
+        if (!content || !content.includes('<svg')) {
+          alert('Kein gültiges SVG zum Zurücksenden vorhanden.')
+          return
+        }
+
+        window.localStorage.setItem(svgcropReturnKey, content)
+        if (window.parent && window.parent !== window) {
+          window.parent.postMessage({ type: 'svgcrop:svgedit:return', key: svgcropReturnKey }, window.location.origin)
+          return
+        }
+
+        if (window.opener && !window.opener.closed) {
+          window.opener.postMessage({ type: 'svgcrop:svgedit:return', key: svgcropReturnKey }, window.location.origin)
+        } else if (svgcropReturnUrl) {
+          try {
+            const backUrl = new URL(svgcropReturnUrl, window.location.origin)
+            if (backUrl.origin === window.location.origin) {
+              backUrl.searchParams.set('svgcropReturned', '1')
+              backUrl.searchParams.set('svgcropReturnKey', svgcropReturnKey)
+              window.location.assign(backUrl.toString())
+              return
+            }
+          } catch (_error) {
+            // ignore invalid return URL
+          }
+        }
+
+        if (!svgcropEmbed) {
+          setTimeout(() => {
+            window.close()
+
+            // Fallback for browsers that ignore a direct close in some tab contexts.
+            setTimeout(() => {
+              try {
+                window.open('', '_self')
+                window.close()
+              } catch (_error) {
+                // ignore
+              }
+            }, 120)
+          }, 80)
+        }
+      } catch (error) {
+        console.warn('svgcrop return to opener failed', error)
+      }
+    })
+
+    document.body.appendChild(button)
+  }
+
+  const loadSvgcropContent = async (svgEditor) => {
+    let content = null
+
+    if (svgcropStorageKey) {
+      content = window.localStorage.getItem(svgcropStorageKey)
+      window.localStorage.removeItem(svgcropStorageKey)
+    }
+
+    if (!content) {
+      content = window.localStorage.getItem(svgcropFallbackKey)
+    }
+
+    if (!content || !content.includes('<svg')) {
+      return
+    }
+
+    const normalized = content
+      .replace(/^\uFEFF/, '')
+      .replace(/^\s*<\?xml[^>]*\?>\s*/i, '')
+      .trim()
+
+    window.localStorage.removeItem(svgcropFallbackKey)
+
+    try {
+      await svgEditor.loadFromString(normalized)
+    } catch (error) {
+      // Fallback path for stricter parsers.
+      const dataUri = 'data:image/svg+xml;utf8,' + encodeURIComponent(normalized)
+      await svgEditor.loadFromDataURI(dataUri)
+    }
+  }
+
+  const bootstrap = async () => {
+    /* for available options see the file `docs/tutorials/ConfigOptions.md */
+    const svgEditor = new Editor(document.getElementById('container'))
+    svgEditor.setConfig({
+      allowInitialUserOverride: true,
+      extensions: [],
+      noDefaultExtensions: false,
+      noStorageOnLoad: true,
+      userExtensions: [/* { pathName: '/packages/react-test/dist/react-test.js' } */]
+    })
+    await svgEditor.init()
+
+    try {
+      await loadSvgcropContent(svgEditor)
+    } catch (error) {
+      console.warn('svgcrop local SVG import failed', error)
+    }
+
+    buildReturnButton(svgEditor)
+
+    // Variable XDOMAIN below is created by Rollup for the Xdomain build (see rollup.config.js)
+    /* globals XDOMAIN */
+    try { // try clause to avoid js to complain if XDOMAIN undefined
+      if (XDOMAIN) {
+        svgEditor.setConfig({
+          canvasName: 'xdomain', // Namespace this
+          allowedOrigins: ['*']
+        })
+        console.info('xdomain config activated')
+      }
+    } catch (error) { /* empty fn */ }
+  }
+
+  bootstrap()
+</script>
+
+</html>

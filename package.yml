@@ -1,5 +1,5 @@
 package: svgcrop
-version: '0.1.0'
+version: '0.2.0'
 author: Friends Of REDAXO
 supportpage: https://github.com/FriendsOfREDAXO/svgcrop
 
@@ -17,3 +17,4 @@ requires:
 
 default_config:
     show_edit_in_list: 1
+    svg_edit_url: '/assets/addons/svgcrop/vendor/svgedit/index.html'
