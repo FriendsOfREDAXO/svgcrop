@@ -98,14 +98,109 @@
     }
 
     function getBoundingBox(svgElement) {
+        function parseViewBox(viewBoxValue) {
+            if (typeof viewBoxValue !== 'string') {
+                return null;
+            }
+
+            var parts = viewBoxValue.trim().split(/\s+|,/).map(function (part) {
+                return parseFloat(part);
+            });
+
+            if (parts.length !== 4 || parts.some(function (num) { return !isFinite(num); })) {
+                return null;
+            }
+
+            if (parts[2] <= 0 || parts[3] <= 0) {
+                return null;
+            }
+
+            return {
+                x: parts[0],
+                y: parts[1],
+                width: parts[2],
+                height: parts[3]
+            };
+        }
+
+        function boxArea(box) {
+            return box.width * box.height;
+        }
+
+        function isSignificantlySmaller(candidate, reference) {
+            if (!candidate || !reference) {
+                return true;
+            }
+
+            return boxArea(candidate) < boxArea(reference) * 0.995;
+        }
+
+        var currentViewBox = parseViewBox(svgElement.getAttribute('viewBox') || '');
+
+        // Prefer the browser-computed bbox of the rendered SVG root.
+        // This usually respects what is actually visible better than iterating all descendants.
+        if (typeof svgElement.getBBox === 'function') {
+            try {
+                var rootBox = svgElement.getBBox();
+                if (
+                    isFinite(rootBox.x) &&
+                    isFinite(rootBox.y) &&
+                    isFinite(rootBox.width) &&
+                    isFinite(rootBox.height) &&
+                    rootBox.width > 0 &&
+                    rootBox.height > 0
+                ) {
+                    return {
+                        x: rootBox.x,
+                        y: rootBox.y,
+                        width: rootBox.width,
+                        height: rootBox.height
+                    };
+                }
+
+                if (isSignificantlySmaller(rootBox, currentViewBox)) {
+                    return {
+                        x: rootBox.x,
+                        y: rootBox.y,
+                        width: rootBox.width,
+                        height: rootBox.height
+                    };
+                }
+            } catch (error) {
+                // Fallback to per-node bbox calculation.
+            }
+        }
+
         var nodes = svgElement.querySelectorAll('*');
         var minX = Infinity;
         var minY = Infinity;
         var maxX = -Infinity;
         var maxY = -Infinity;
 
+        function shouldSkipForBBox(node) {
+            if (!node || !node.tagName) {
+                return true;
+            }
+
+            var hiddenByDisplay = node.getAttribute('display');
+            if (hiddenByDisplay && hiddenByDisplay.toLowerCase() === 'none') {
+                return true;
+            }
+
+            // Ignore definition and helper containers that do not render directly.
+            if (node.closest('defs,clipPath,mask,pattern,symbol,marker,linearGradient,radialGradient,filter')) {
+                return true;
+            }
+
+            return false;
+        }
+
         nodes.forEach(function (node) {
             if (typeof node.getBBox !== 'function') {
+                return;
+            }
+
+            if (shouldSkipForBBox(node)) {
                 return;
             }
 
@@ -115,10 +210,35 @@
                     return;
                 }
 
-                minX = Math.min(minX, box.x);
-                minY = Math.min(minY, box.y);
-                maxX = Math.max(maxX, box.x + box.width);
-                maxY = Math.max(maxY, box.y + box.height);
+                var ctm = typeof node.getCTM === 'function' ? node.getCTM() : null;
+                if (!ctm) {
+                    minX = Math.min(minX, box.x);
+                    minY = Math.min(minY, box.y);
+                    maxX = Math.max(maxX, box.x + box.width);
+                    maxY = Math.max(maxY, box.y + box.height);
+                    return;
+                }
+
+                var corners = [
+                    {x: box.x, y: box.y},
+                    {x: box.x + box.width, y: box.y},
+                    {x: box.x, y: box.y + box.height},
+                    {x: box.x + box.width, y: box.y + box.height}
+                ];
+
+                corners.forEach(function (corner) {
+                    var tx = (ctm.a * corner.x) + (ctm.c * corner.y) + ctm.e;
+                    var ty = (ctm.b * corner.x) + (ctm.d * corner.y) + ctm.f;
+
+                    if (!isFinite(tx) || !isFinite(ty)) {
+                        return;
+                    }
+
+                    minX = Math.min(minX, tx);
+                    minY = Math.min(minY, ty);
+                    maxX = Math.max(maxX, tx);
+                    maxY = Math.max(maxY, ty);
+                });
             } catch (error) {
                 // ignore nodes that cannot calculate a bounding box
             }
@@ -143,6 +263,153 @@
         };
     }
 
+    function parseViewBoxValue(viewBoxValue) {
+        if (typeof viewBoxValue !== 'string') {
+            return null;
+        }
+
+        var parts = viewBoxValue.trim().split(/\s+|,/).map(function (part) {
+            return parseFloat(part);
+        });
+
+        if (parts.length !== 4 || parts.some(function (num) { return !isFinite(num); })) {
+            return null;
+        }
+
+        if (parts[2] <= 0 || parts[3] <= 0) {
+            return null;
+        }
+
+        return {
+            x: parts[0],
+            y: parts[1],
+            width: parts[2],
+            height: parts[3]
+        };
+    }
+
+    function getRenderDimensions(svgElement) {
+        var viewBox = parseViewBoxValue(svgElement.getAttribute('viewBox') || '');
+        var width = parseLength(svgElement.getAttribute('width') || '');
+        var height = parseLength(svgElement.getAttribute('height') || '');
+
+        if (viewBox) {
+            if (!(isFinite(width) && width > 0)) {
+                width = viewBox.width;
+            }
+            if (!(isFinite(height) && height > 0)) {
+                height = viewBox.height;
+            }
+        }
+
+        if (!(isFinite(width) && width > 0) || !(isFinite(height) && height > 0)) {
+            return null;
+        }
+
+        return {
+            width: width,
+            height: height,
+            viewBox: viewBox
+        };
+    }
+
+    function getRenderedBoundingBox(svgElement, previewElement) {
+        return new Promise(function (resolve) {
+            var dimensions = getRenderDimensions(svgElement);
+            if (!dimensions) {
+                resolve(null);
+                return;
+            }
+
+            var scale = 4;
+            var maxPixels = 4096;
+            var renderWidth = Math.max(1, Math.round(dimensions.width));
+            var renderHeight = Math.max(1, Math.round(dimensions.height));
+
+            var canvasWidth = Math.min(maxPixels, Math.max(1, Math.round(renderWidth * scale)));
+            var canvasHeight = Math.min(maxPixels, Math.max(1, Math.round(renderHeight * scale)));
+
+            var serializer = new XMLSerializer();
+            var serialized = serializer.serializeToString(svgElement);
+            var blob = new Blob([serialized], { type: 'image/svg+xml;charset=utf-8' });
+            var url = URL.createObjectURL(blob);
+            var image = new Image();
+
+            image.onload = function () {
+                try {
+                    var canvas = document.createElement('canvas');
+                    canvas.width = canvasWidth;
+                    canvas.height = canvasHeight;
+
+                    var context = canvas.getContext('2d');
+                    if (!context) {
+                        resolve(null);
+                        return;
+                    }
+
+                    context.clearRect(0, 0, canvasWidth, canvasHeight);
+                    context.drawImage(image, 0, 0, canvasWidth, canvasHeight);
+
+                    var imageData = context.getImageData(0, 0, canvasWidth, canvasHeight).data;
+                    var minX = canvasWidth;
+                    var minY = canvasHeight;
+                    var maxX = -1;
+                    var maxY = -1;
+
+                    for (var y = 0; y < canvasHeight; y++) {
+                        for (var x = 0; x < canvasWidth; x++) {
+                            var index = (y * canvasWidth + x) * 4;
+                            var alpha = imageData[index + 3];
+
+                            if (alpha > 8) {
+                                minX = Math.min(minX, x);
+                                minY = Math.min(minY, y);
+                                maxX = Math.max(maxX, x);
+                                maxY = Math.max(maxY, y);
+                            }
+                        }
+                    }
+
+                    if (maxX < minX || maxY < minY) {
+                        resolve(null);
+                        return;
+                    }
+
+                    var refViewBox = dimensions.viewBox || {
+                        x: 0,
+                        y: 0,
+                        width: dimensions.width,
+                        height: dimensions.height
+                    };
+
+                    var x1 = refViewBox.x + (minX / canvasWidth) * refViewBox.width;
+                    var y1 = refViewBox.y + (minY / canvasHeight) * refViewBox.height;
+                    var x2 = refViewBox.x + ((maxX + 1) / canvasWidth) * refViewBox.width;
+                    var y2 = refViewBox.y + ((maxY + 1) / canvasHeight) * refViewBox.height;
+
+                    resolve({
+                        x: x1,
+                        y: y1,
+                        width: Math.max(0, x2 - x1),
+                        height: Math.max(0, y2 - y1)
+                    });
+                } catch (error) {
+                    resolve(null);
+                } finally {
+                    URL.revokeObjectURL(url);
+                }
+            };
+
+            image.onerror = function () {
+                URL.revokeObjectURL(url);
+                resolve(null);
+            };
+
+            // Ensure deterministic dimensions for raster analysis.
+            image.src = url;
+        });
+    }
+
     function serializeSvg(svgElement) {
         var serializer = new XMLSerializer();
         return serializer.serializeToString(svgElement);
@@ -154,6 +421,30 @@
             .replace(/\s+\/>/g, '/>')
             .replace(/\s{2,}/g, ' ')
             .trim();
+    }
+
+    function cleanupSvgForSave(svgElement) {
+        var style = svgElement.getAttribute('style');
+        if (!style) {
+            return;
+        }
+
+        var cleaned = style
+            .replace(/(?:^|;)\s*width\s*:[^;]*/gi, '')
+            .replace(/(?:^|;)\s*height\s*:[^;]*/gi, '')
+            .replace(/(?:^|;)\s*max-width\s*:[^;]*/gi, '')
+            .replace(/(?:^|;)\s*max-height\s*:[^;]*/gi, '')
+            .replace(/(?:^|;)\s*display\s*:[^;]*/gi, '')
+            .replace(/;;+/g, ';')
+            .replace(/^\s*;|;\s*$/g, '')
+            .trim();
+
+        if ('' === cleaned) {
+            svgElement.removeAttribute('style');
+            return;
+        }
+
+        svgElement.setAttribute('style', cleaned);
     }
 
     function ensurePreviewViewBox(svg) {
@@ -182,6 +473,13 @@
             return;
         }
 
+        if (!document.getElementById('svgcrop-preview-style')) {
+            var styleNode = document.createElement('style');
+            styleNode.id = 'svgcrop-preview-style';
+            styleNode.textContent = '#svgcrop-preview > svg{width:100%;height:100%;max-width:100%;max-height:100%;display:block;}';
+            document.head.appendChild(styleNode);
+        }
+
         function getPaddingValue() {
             var padding = parseFloat(paddingInput.value || '0');
             if (!isFinite(padding) || padding < 0) {
@@ -205,12 +503,6 @@
             }
 
             ensurePreviewViewBox(svg);
-
-            svg.style.width = '100%';
-            svg.style.height = '100%';
-            svg.style.maxWidth = '100%';
-            svg.style.maxHeight = '100%';
-            svg.style.display = 'block';
             setStatus('', false);
             return svg;
         }
@@ -222,6 +514,7 @@
             }
 
             optimizeSvg(svg);
+            cleanupSvgForSave(svg);
             editor.value = minifySvgString(serializeSvg(svg));
             renderPreview();
             setStatus('SVG wurde für das Web optimiert und minifiziert.', false);
@@ -235,13 +528,19 @@
             newFileOptions.style.display = createNewCheckbox.checked ? '' : 'none';
         }
 
-        trimButton.addEventListener('click', function () {
+        trimButton.addEventListener('click', async function () {
             var svg = renderPreview();
             if (!svg) {
                 return;
             }
 
-            var bbox = getBoundingBox(svg);
+            setStatus('Sichtbare Fläche wird analysiert...', false);
+
+            var bbox = await getRenderedBoundingBox(svg, preview);
+            if (!bbox) {
+                bbox = getBoundingBox(svg);
+            }
+
             if (!bbox) {
                 setStatus('Der SVG-Inhalt konnte nicht zugeschnitten werden.', true);
                 return;
@@ -257,6 +556,7 @@
             svg.setAttribute('viewBox', x + ' ' + y + ' ' + width + ' ' + height);
             svg.removeAttribute('width');
             svg.removeAttribute('height');
+            cleanupSvgForSave(svg);
 
             editor.value = minifySvgString(serializeSvg(svg));
             renderPreview();

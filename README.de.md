@@ -7,7 +7,7 @@ Verlustfreies Zuschneiden und Optimieren von SVG-Dateien im REDAXO-Medienpool.
 
 - Fügt in Medienliste und Detailansicht einen Link SVG zuschneiden hinzu
 - Link wird nur für SVG-Dateien angezeigt
-- Entfernt überflüssigen Leerraum über eine angepasste viewBox
+- Entfernt überflüssigen Leerraum über eine angepasste viewBox (ideal für Logos)
 - Optionales Web-Optimieren entfernt typischen Editor-Ballast (z. B. Adobe/Inkscape-Metadaten)
 - Speichern als neue Datei oder Überschreiben (mit Berechtigung)
 

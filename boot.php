@@ -20,6 +20,23 @@ if (!function_exists('svgcrop_is_supported_media')) {
     }
 }
 
+if (!function_exists('svgcrop_render_feedback_once')) {
+    function svgcrop_render_feedback_once(): void
+    {
+        static $wasRendered = false;
+        if ($wasRendered) {
+            return;
+        }
+
+        $msg = rex_request::request('svgcrop_msg', 'string', null);
+        $hasError = rex_request::request('svgcrop_error', 'boolean', false);
+        if (is_string($msg) && '' !== $msg) {
+            echo $hasError ? rex_view::error(rex_i18n::msg($msg)) : rex_view::success(rex_i18n::msg($msg));
+            $wasRendered = true;
+        }
+    }
+}
+
 if (rex::isBackend() && $user instanceof rex_user && $user->hasPerm('svgcrop[]')) {
     $addon = $this;
     $assetVersion = static function (string $assetPath) use ($addon): string {
@@ -41,11 +58,7 @@ if (rex::isBackend() && $user instanceof rex_user && $user->hasPerm('svgcrop[]')
         /** @var rex_sql $media */
         $media = $ep->getParam('media');
 
-        $msg = rex_request::request('svgcrop_msg', 'string', null);
-        $hasError = rex_request::request('svgcrop_error', 'boolean', false);
-        if (is_string($msg) && '' !== $msg) {
-            echo $hasError ? rex_view::error(rex_i18n::msg($msg)) : rex_view::success(rex_i18n::msg($msg));
-        }
+        svgcrop_render_feedback_once();
 
         $filename = (string) $media->getValue('filename');
         $rexMedia = '' !== $filename ? rex_media::get($filename) : null;
@@ -78,11 +91,7 @@ if (rex::isBackend() && $user instanceof rex_user && $user->hasPerm('svgcrop[]')
     rex_extension::register('MEDIA_LIST_FUNCTIONS', static function (rex_extension_point $ep): string {
         $subject = (string) $ep->getSubject();
 
-        $msg = rex_request::request('svgcrop_msg', 'string', null);
-        $hasError = rex_request::request('svgcrop_error', 'boolean', false);
-        if (is_string($msg) && '' !== $msg) {
-            echo $hasError ? rex_view::error(rex_i18n::msg($msg)) : rex_view::success(rex_i18n::msg($msg));
-        }
+        svgcrop_render_feedback_once();
 
         if ((int) rex_config::get('svgcrop', 'show_edit_in_list', 1) !== 1) {
             return $subject;
