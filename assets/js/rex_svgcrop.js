@@ -579,23 +579,41 @@
             panel.style.borderRadius = '8px';
             panel.style.overflow = 'hidden';
             panel.style.boxShadow = '0 18px 50px rgba(0, 0, 0, 0.35)';
+            panel.style.display = 'flex';
+            panel.style.flexDirection = 'column';
+
+            var toolbar = document.createElement('div');
+            toolbar.style.height = '48px';
+            toolbar.style.flex = '0 0 48px';
+            toolbar.style.display = 'flex';
+            toolbar.style.alignItems = 'center';
+            toolbar.style.justifyContent = 'flex-end';
+            toolbar.style.gap = '10px';
+            toolbar.style.padding = '8px 12px';
+            toolbar.style.background = '#f7f7f7';
+            toolbar.style.borderBottom = '1px solid #e1e1e1';
+
+            var applyButton = document.createElement('button');
+            applyButton.type = 'button';
+            applyButton.textContent = 'Uebernehmen in SVG-Crop';
+            applyButton.className = 'btn btn-primary';
+            applyButton.addEventListener('click', function () {
+                if (!pendingSvgEditReturnKey || !svgEditOverlayFrame || !svgEditOverlayFrame.contentWindow) {
+                    setStatus('Kein Rueckkanal zu SVG-Edit verfuegbar.', true);
+                    return;
+                }
+
+                svgEditOverlayFrame.contentWindow.postMessage({
+                    type: 'svgcrop:host:request-return',
+                    key: pendingSvgEditReturnKey
+                }, window.location.origin);
+            });
 
             var closeButton = document.createElement('button');
             closeButton.type = 'button';
-            closeButton.textContent = '×';
+            closeButton.textContent = 'Schliessen';
             closeButton.setAttribute('aria-label', 'SVG-Edit schließen');
-            closeButton.style.position = 'absolute';
-            closeButton.style.top = '10px';
-            closeButton.style.right = '10px';
-            closeButton.style.zIndex = '2';
-            closeButton.style.width = '34px';
-            closeButton.style.height = '34px';
-            closeButton.style.border = '1px solid #d7d7d7';
-            closeButton.style.borderRadius = '50%';
-            closeButton.style.background = '#fff';
-            closeButton.style.fontSize = '22px';
-            closeButton.style.lineHeight = '1';
-            closeButton.style.cursor = 'pointer';
+            closeButton.className = 'btn btn-default';
             closeButton.addEventListener('click', function () {
                 svgEditOverlay.style.display = 'none';
             });
@@ -603,11 +621,14 @@
             svgEditOverlayFrame = document.createElement('iframe');
             svgEditOverlayFrame.id = 'svgcrop-svgedit-iframe';
             svgEditOverlayFrame.setAttribute('title', 'SVG-Edit');
+            svgEditOverlayFrame.style.flex = '1 1 auto';
+            svgEditOverlayFrame.style.minHeight = '0';
             svgEditOverlayFrame.style.width = '100%';
-            svgEditOverlayFrame.style.height = '100%';
             svgEditOverlayFrame.style.border = '0';
 
-            panel.appendChild(closeButton);
+            toolbar.appendChild(applyButton);
+            toolbar.appendChild(closeButton);
+            panel.appendChild(toolbar);
             panel.appendChild(svgEditOverlayFrame);
             svgEditOverlay.appendChild(panel);
             document.body.appendChild(svgEditOverlay);

@@ -39,8 +39,58 @@
   const svgcropReturnUrl = params.get('svgcropReturnUrl')
   const svgcropEmbed = params.get('svgcropEmbed') === '1'
 
+  const returnToSvgcrop = (content, returnKeyOverride = null) => {
+    const targetKey = returnKeyOverride || svgcropReturnKey
+    if (!targetKey) {
+      return
+    }
+
+    window.localStorage.setItem(targetKey, content)
+
+    if (window.parent && window.parent !== window) {
+      window.parent.postMessage({ type: 'svgcrop:svgedit:return', key: targetKey }, window.location.origin)
+      return
+    }
+
+    if (window.opener && !window.opener.closed) {
+      window.opener.postMessage({ type: 'svgcrop:svgedit:return', key: targetKey }, window.location.origin)
+      return
+    }
+
+    if (svgcropReturnUrl) {
+      try {
+        const backUrl = new URL(svgcropReturnUrl, window.location.origin)
+        if (backUrl.origin === window.location.origin) {
+          backUrl.searchParams.set('svgcropReturned', '1')
+          backUrl.searchParams.set('svgcropReturnKey', targetKey)
+          window.location.assign(backUrl.toString())
+        }
+      } catch (_error) {
+        // ignore invalid return URL
+      }
+    }
+  }
+
+  const setupHostReturnRequestHandler = (svgEditor) => {
+    window.addEventListener('message', (event) => {
+      if (event.origin !== window.location.origin || !event.data || event.data.type !== 'svgcrop:host:request-return') {
+        return
+      }
+
+      try {
+        const content = svgEditor.svgCanvas.getSvgString()
+        if (!content || !content.includes('<svg')) {
+          return
+        }
+        returnToSvgcrop(content, event.data.key)
+      } catch (_error) {
+        // ignore
+      }
+    })
+  }
+
   const buildReturnButton = (svgEditor) => {
-    if (!svgcropReturnKey) {
+    if (!svgcropReturnKey || svgcropEmbed) {
       return
     }
 
@@ -67,27 +117,7 @@
           return
         }
 
-        window.localStorage.setItem(svgcropReturnKey, content)
-        if (window.parent && window.parent !== window) {
-          window.parent.postMessage({ type: 'svgcrop:svgedit:return', key: svgcropReturnKey }, window.location.origin)
-          return
-        }
-
-        if (window.opener && !window.opener.closed) {
-          window.opener.postMessage({ type: 'svgcrop:svgedit:return', key: svgcropReturnKey }, window.location.origin)
-        } else if (svgcropReturnUrl) {
-          try {
-            const backUrl = new URL(svgcropReturnUrl, window.location.origin)
-            if (backUrl.origin === window.location.origin) {
-              backUrl.searchParams.set('svgcropReturned', '1')
-              backUrl.searchParams.set('svgcropReturnKey', svgcropReturnKey)
-              window.location.assign(backUrl.toString())
-              return
-            }
-          } catch (_error) {
-            // ignore invalid return URL
-          }
-        }
+        returnToSvgcrop(content)
 
         if (!svgcropEmbed) {
           setTimeout(() => {
@@ -163,6 +193,7 @@
     }
 
     buildReturnButton(svgEditor)
+    setupHostReturnRequestHandler(svgEditor)
 
     // Variable XDOMAIN below is created by Rollup for the Xdomain build (see rollup.config.js)
     /* globals XDOMAIN */
