@@ -8,6 +8,7 @@ pages:
         title: svgcrop
         hidden: true
         pjax: true
+        perm: svgcrop[]
 
 requires:
     redaxo: '^5.18.1'
