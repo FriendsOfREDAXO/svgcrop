@@ -9,6 +9,11 @@ pages:
         hidden: true
         pjax: true
         perm: svgcrop[]
+    mediapool/svgcrop_settings:
+        title: svgcrop
+        hidden: true
+        pjax: true
+        perm: svgcrop[settings]
 
 requires:
     redaxo: '^5.18.1'
@@ -18,3 +23,5 @@ requires:
 default_config:
     show_edit_in_list: 1
     svg_edit_url: '/assets/addons/svgcrop/vendor/svgedit/index.html'
+    default_trim_padding: 0
+    ratio_profiles_json: '[{"key":"logo_square","label":"Logo 1:1","width":1,"height":1,"mode":"contain","anchor":"center"},{"key":"tile_4_3","label":"Tile 4:3","width":4,"height":3,"mode":"contain","anchor":"center"},{"key":"hero_16_9","label":"Hero 16:9","width":16,"height":9,"mode":"contain","anchor":"center"}]'

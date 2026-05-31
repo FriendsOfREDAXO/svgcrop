@@ -14,7 +14,12 @@ $title = '';
 $class = 'edit';
 
 $backLink = '<a class="btn btn-default" href="' . rex_url::backendPage(SVGCROP_POOL_MEDIA, $urlParameter, false) . '"><span class="fa fa-arrow-left" aria-hidden="true"></span> <span>' . rex_i18n::msg('svgcrop_back_to_media') . '</span></a>';
-$back = '<div class="cropper-page-options">' . $backLink . '</div>';
+$settingsLink = '';
+if (svgcrop_can_access_settings($user)) {
+    $settingsUrl = rex_url::backendPage('mediapool/svgcrop_settings', ['rex_file_category' => rex_request::request('rex_file_category', 'integer')], true);
+    $settingsLink = ' <a class="btn btn-default" href="' . $settingsUrl . '" title="' . rex_escape(rex_i18n::msg('svgcrop_settings')) . '"><i class="fa fa-cog"></i></a>';
+}
+$back = '<div class="cropper-page-options">' . $backLink . $settingsLink . '</div>';
 
 if (!$user instanceof rex_user || !$user->hasPerm('svgcrop[]')) {
     rex_response::sendRedirect(rex_url::backendPage(SVGCROP_POOL_MEDIA, $urlParameter, false));
@@ -124,6 +129,77 @@ try {
     if ('' === $svgEditUrl || 'https://unpkg.com/svgedit@latest/dist/editor/index.html' === $svgEditUrl) {
         $svgEditUrl = $defaultSvgEditUrl;
     }
+    $defaultTrimPadding = (float) rex_config::get('svgcrop', 'default_trim_padding', 0);
+    if (!is_finite($defaultTrimPadding) || $defaultTrimPadding < 0) {
+        $defaultTrimPadding = 0.0;
+    }
+
+    $ratioProfilesRaw = rex_config::get('svgcrop', 'ratio_profiles_json', '[]');
+    if (is_array($ratioProfilesRaw)) {
+        $ratioProfiles = $ratioProfilesRaw;
+    } else {
+        $ratioProfiles = json_decode((string) $ratioProfilesRaw, true);
+        if (!is_array($ratioProfiles)) {
+            $ratioProfiles = [];
+        }
+    }
+
+    $normalizedProfiles = [];
+    foreach ($ratioProfiles as $profile) {
+        if (!is_array($profile)) {
+            continue;
+        }
+
+        $label = trim((string) ($profile['label'] ?? ''));
+        $width = (float) ($profile['width'] ?? 0);
+        $height = (float) ($profile['height'] ?? 0);
+        if ('' === $label || $width <= 0 || $height <= 0) {
+            continue;
+        }
+
+        $mode = strtolower((string) ($profile['mode'] ?? 'contain'));
+        if ('cover' !== $mode) {
+            $mode = 'contain';
+        }
+
+        $anchor = strtolower((string) ($profile['anchor'] ?? 'center'));
+        $allowedAnchors = ['top-left', 'top', 'top-right', 'left', 'center', 'right', 'bottom-left', 'bottom', 'bottom-right'];
+        if (!in_array($anchor, $allowedAnchors, true)) {
+            $anchor = 'center';
+        }
+
+        $key = trim((string) ($profile['key'] ?? ''));
+        if ('' === $key) {
+            $key = 'ratio_' . count($normalizedProfiles);
+        }
+
+        $normalizedProfiles[] = [
+            'key' => $key,
+            'label' => $label,
+            'width' => $width,
+            'height' => $height,
+            'mode' => $mode,
+            'anchor' => $anchor,
+        ];
+    }
+
+    if ([] === $normalizedProfiles) {
+        $normalizedProfiles[] = [
+            'key' => 'logo_square',
+            'label' => 'Logo 1:1',
+            'width' => 1,
+            'height' => 1,
+            'mode' => 'contain',
+            'anchor' => 'center',
+        ];
+    }
+
+    $ratioOptions = '';
+    foreach ($normalizedProfiles as $profile) {
+        $ratioLabel = $profile['label'] . ' (' . $profile['width'] . ':' . $profile['height'] . ', ' . $profile['mode'] . ', ' . $profile['anchor'] . ')';
+        $ratioOptions .= '<option value="' . rex_escape((string) $profile['key']) . '">' . rex_escape($ratioLabel) . '</option>';
+    }
+
     $fileBaseName = pathinfo($media->getFileName(), PATHINFO_FILENAME);
 
     $catsSel = new rex_media_category_select();
@@ -174,9 +250,11 @@ try {
         . '<div class="form-inline" style="margin-bottom:10px">'
         . '<button type="button" class="btn btn-default" id="svgcrop-optimize-button">' . rex_i18n::msg('svgcrop_optimize_button') . '</button> '
         . '<button type="button" class="btn btn-default" id="svgcrop-trim-button">' . rex_i18n::msg('svgcrop_trim_button') . '</button> '
+        . '<select class="form-control" id="svgcrop-ratio-profile" data-ratio-profiles="' . rex_escape((string) json_encode($normalizedProfiles, JSON_UNESCAPED_SLASHES)) . '" style="width:auto;max-width:380px">' . $ratioOptions . '</select> '
+        . '<button type="button" class="btn btn-default" id="svgcrop-fit-ratio-button">' . rex_i18n::msg('svgcrop_fit_ratio_button') . '</button> '
         . ($canSvgEdit ? '<button type="button" class="btn btn-default" id="svgcrop-open-svg-edit" data-svgedit-url="' . rex_escape($svgEditUrl) . '">' . rex_i18n::msg('svgcrop_svg_edit_button') . '</button> ' : '')
         . '<label for="svgcrop-trim-padding" style="margin-left:8px">' . rex_i18n::msg('svgcrop_trim_padding') . '</label> '
-        . '<input type="number" class="form-control" id="svgcrop-trim-padding" value="0" step="0.5" style="width:90px" />'
+        . '<input type="number" class="form-control" id="svgcrop-trim-padding" value="' . rex_escape((string) $defaultTrimPadding) . '" step="0.5" style="width:90px" />'
         . '</div>'
         . ($canSvgEdit ? '<p class="help-block">' . rex_i18n::msg('svgcrop_svg_edit_notice') . '</p>' : '')
         . '<div id="svgcrop-preview" style="height:50vh;max-height:50vh;overflow:hidden;display:flex;align-items:center;justify-content:center;border:1px solid #d7d7d7;padding:10px;background:#fff"></div>'

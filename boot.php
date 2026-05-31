@@ -8,6 +8,7 @@ if (rex::isBackend() && $user instanceof rex_user) {
     rex_perm::register('svgcrop[]');
     rex_perm::register('svgcrop[overwrite]');
     rex_perm::register('svgcrop[svg_edit]');
+    rex_perm::register('svgcrop[settings]');
 }
 
 if (!function_exists('svgcrop_is_supported_media')) {
@@ -35,6 +36,17 @@ if (!function_exists('svgcrop_render_feedback_once')) {
             echo $hasError ? rex_view::error(rex_i18n::msg($msg)) : rex_view::success(rex_i18n::msg($msg));
             $wasRendered = true;
         }
+    }
+}
+
+if (!function_exists('svgcrop_can_access_settings')) {
+    function svgcrop_can_access_settings(?rex_user $user): bool
+    {
+        if (!$user instanceof rex_user) {
+            return false;
+        }
+
+        return $user->isAdmin() || $user->hasPerm('svgcrop[settings]');
     }
 }
 
@@ -80,10 +92,16 @@ if (rex::isBackend() && $user instanceof rex_user && $user->hasPerm('svgcrop[]')
 
         $link = rex_url::backendPage('mediapool/svgcrop', $linkParams, true);
 
+        $settingsLink = '';
+        $currentUser = rex::getUser();
+        if (svgcrop_can_access_settings($currentUser)) {
+            $settingsLink = '<a class="btn btn-default" href="' . rex_url::backendPage('mediapool/svgcrop_settings', ['rex_file_category' => rex_request::get('rex_file_category', 'integer', 0)], true) . '" title="' . rex_escape(rex_i18n::msg('svgcrop_settings')) . '"><i class="fa fa-cog"></i></a>';
+        }
+
         $fragment = new rex_fragment();
         $fragment->setVar('elements', [[
             'label' => '<label>' . rex_i18n::msg('svgcrop_media_edit_label') . '</label>',
-            'field' => '<a class="btn btn-primary" href="' . $link . '"><span>' . rex_i18n::msg('svgcrop_media_edit_link') . '</span> <i class="fa fa-crop"></i></a>',
+            'field' => '<div class="btn-group"><a class="btn btn-primary" href="' . $link . '"><span>' . rex_i18n::msg('svgcrop_media_edit_link') . '</span> <i class="fa fa-crop"></i></a>' . $settingsLink . '</div>',
         ]], false);
 
         return $fragment->parse('core/form/form.php');
@@ -119,6 +137,12 @@ if (rex::isBackend() && $user instanceof rex_user && $user->hasPerm('svgcrop[]')
 
         $link = rex_url::backendPage('mediapool/svgcrop', $linkParams, true);
 
-        return '<a href="' . $link . '" class="svgcrop-media-edit-link"><span>' . rex_i18n::msg('svgcrop_media_edit_link') . '</span> <i class="fa fa-crop"></i></a>' . $subject;
+        $settingsLink = '';
+        $currentUser = rex::getUser();
+        if (svgcrop_can_access_settings($currentUser)) {
+            $settingsLink = '<a href="' . rex_url::backendPage('mediapool/svgcrop_settings', ['rex_file_category' => rex_request::get('rex_file_category', 'integer', 0)], true) . '" class="svgcrop-settings-link" title="' . rex_escape(rex_i18n::msg('svgcrop_settings')) . '"><i class="fa fa-cog"></i></a>&nbsp;';
+        }
+
+        return $settingsLink . '<a href="' . $link . '" class="svgcrop-media-edit-link"><span>' . rex_i18n::msg('svgcrop_media_edit_link') . '</span> <i class="fa fa-crop"></i></a>' . $subject;
     });
 }

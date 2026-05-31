@@ -469,6 +469,8 @@
         var createNewCheckbox = document.getElementById('svgcrop-create-new-image');
         var newFileOptions = document.getElementById('svgcrop-new-file-options');
         var openSvgEditButton = document.getElementById('svgcrop-open-svg-edit');
+        var ratioProfileSelect = document.getElementById('svgcrop-ratio-profile');
+        var fitRatioButton = document.getElementById('svgcrop-fit-ratio-button');
         var pendingSvgEditReturnKey = null;
         var svgEditOverlay = null;
         var svgEditOverlayFrame = null;
@@ -634,6 +636,113 @@
             document.body.appendChild(svgEditOverlay);
         }
 
+        function getSelectedRatioProfile() {
+            if (!ratioProfileSelect) {
+                return null;
+            }
+
+            var raw = ratioProfileSelect.getAttribute('data-ratio-profiles') || '[]';
+            var profiles;
+            try {
+                profiles = JSON.parse(raw);
+            } catch (error) {
+                return null;
+            }
+
+            if (!Array.isArray(profiles)) {
+                return null;
+            }
+
+            var key = ratioProfileSelect.value;
+            for (var i = 0; i < profiles.length; i++) {
+                if (profiles[i] && String(profiles[i].key) === String(key)) {
+                    return profiles[i];
+                }
+            }
+
+            return profiles.length > 0 ? profiles[0] : null;
+        }
+
+        function anchorParts(anchor) {
+            var val = String(anchor || 'center').toLowerCase();
+            var x = 'center';
+            var y = 'center';
+
+            if (val.indexOf('left') !== -1) {
+                x = 'left';
+            } else if (val.indexOf('right') !== -1) {
+                x = 'right';
+            }
+
+            if (val.indexOf('top') !== -1) {
+                y = 'top';
+            } else if (val.indexOf('bottom') !== -1) {
+                y = 'bottom';
+            }
+
+            if (val === 'top' || val === 'bottom' || val === 'left' || val === 'right' || val === 'center') {
+                if (val === 'top' || val === 'bottom') {
+                    y = val;
+                    x = 'center';
+                } else if (val === 'left' || val === 'right') {
+                    x = val;
+                    y = 'center';
+                }
+            }
+
+            return { x: x, y: y };
+        }
+
+        function fitViewBoxToRatio(bbox, ratioWidth, ratioHeight, mode, anchor) {
+            var targetRatio = ratioWidth / ratioHeight;
+            var contentRatio = bbox.width / bbox.height;
+            var resultWidth;
+            var resultHeight;
+
+            if (mode === 'cover') {
+                if (contentRatio > targetRatio) {
+                    resultHeight = bbox.height;
+                    resultWidth = resultHeight * targetRatio;
+                } else {
+                    resultWidth = bbox.width;
+                    resultHeight = resultWidth / targetRatio;
+                }
+            } else {
+                if (contentRatio > targetRatio) {
+                    resultWidth = bbox.width;
+                    resultHeight = resultWidth / targetRatio;
+                } else {
+                    resultHeight = bbox.height;
+                    resultWidth = resultHeight * targetRatio;
+                }
+            }
+
+            var deltaX = bbox.width - resultWidth;
+            var deltaY = bbox.height - resultHeight;
+            var parts = anchorParts(anchor);
+            var x = bbox.x;
+            var y = bbox.y;
+
+            if (parts.x === 'center') {
+                x += deltaX / 2;
+            } else if (parts.x === 'right') {
+                x += deltaX;
+            }
+
+            if (parts.y === 'center') {
+                y += deltaY / 2;
+            } else if (parts.y === 'bottom') {
+                y += deltaY;
+            }
+
+            return {
+                x: x,
+                y: y,
+                width: resultWidth,
+                height: resultHeight
+            };
+        }
+
         function renderPreview() {
             preview.innerHTML = editor.value;
             var svg = preview.querySelector('svg');
@@ -775,6 +884,63 @@
             renderPreview();
             setStatus('Leerraum wurde entfernt (ViewBox angepasst).', false);
         });
+
+        if (fitRatioButton) {
+            fitRatioButton.addEventListener('click', async function () {
+                var svg = renderPreview();
+                if (!svg) {
+                    return;
+                }
+
+                var profile = getSelectedRatioProfile();
+                if (!profile) {
+                    setStatus('Kein Ratio-Profil verfügbar.', true);
+                    return;
+                }
+
+                var width = parseFloat(profile.width);
+                var height = parseFloat(profile.height);
+                if (!isFinite(width) || !isFinite(height) || width <= 0 || height <= 0) {
+                    setStatus('Ungültiges Ratio-Profil.', true);
+                    return;
+                }
+
+                setStatus('Ratio wird angewendet...', false);
+
+                var bbox = await getRenderedBoundingBox(svg, preview);
+                if (!bbox) {
+                    bbox = getBoundingBox(svg);
+                }
+
+                if (!bbox) {
+                    setStatus('Der SVG-Inhalt konnte nicht in Ratio eingepasst werden.', true);
+                    return;
+                }
+
+                var fit = fitViewBoxToRatio(
+                    bbox,
+                    width,
+                    height,
+                    String(profile.mode || 'contain').toLowerCase(),
+                    String(profile.anchor || 'center').toLowerCase()
+                );
+
+                var padding = getPaddingValue();
+                fit.x -= padding;
+                fit.y -= padding;
+                fit.width += padding * 2;
+                fit.height += padding * 2;
+
+                svg.setAttribute('viewBox', fit.x + ' ' + fit.y + ' ' + fit.width + ' ' + fit.height);
+                svg.removeAttribute('width');
+                svg.removeAttribute('height');
+                cleanupSvgForSave(svg);
+
+                editor.value = minifySvgString(serializeSvg(svg));
+                renderPreview();
+                setStatus('Ratio-Profil wurde angewendet.', false);
+            });
+        }
 
         if (openSvgEditButton) {
             consumeSvgEditReturnFromUrl();

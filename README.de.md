@@ -8,9 +8,11 @@ Verlustfreies Zuschneiden und Optimieren von SVG-Dateien im REDAXO-Medienpool.
 - Fügt in Medienliste und Detailansicht einen Link SVG zuschneiden hinzu
 - Link wird nur für SVG-Dateien angezeigt
 - Entfernt überflüssigen Leerraum über eine angepasste viewBox (ideal für Logos)
+- Passt SVG-Inhalte in konfigurierbare Ziel-Ratios für Logos, Kacheln und Medienformate ein
 - Optionales Web-Optimieren entfernt typischen Editor-Ballast (z. B. Adobe/Inkscape-Metadaten)
 - Integriert ein lokales SVG-Edit direkt als Overlay in derselben Medienpool-Seite
 - Übernimmt bearbeitete SVG-Inhalte aus SVG-Edit direkt zurück nach svgcrop ohne Tab-/Fensterwechsel
+- Bietet eine versteckte Einstellungsseite im Medienpool mit Zahnradzugriff für Administratoren/Einstellungsnutzer
 - Speichern als neue Datei oder Überschreiben (mit Berechtigung)
 
 ## Nutzung
@@ -18,18 +20,28 @@ Verlustfreies Zuschneiden und Optimieren von SVG-Dateien im REDAXO-Medienpool.
 1. SVG-Datei im Medienpool öffnen und SVG zuschneiden anklicken.
 2. Optional SVG optimieren ausführen.
 3. Optional Rand (Padding) setzen.
-4. Leerraum entfernen ausführen.
-5. Optional In SVG-Edit öffnen ausführen.
-6. Im Overlay fertig bearbeiten und Übernehmen in SVG-Crop anklicken.
-7. Speichern.
+4. Optional ein Ratio-Profil auswählen und In Ratio einpassen ausführen.
+5. Bei Bedarf Leerraum entfernen ausführen.
+6. Optional In SVG-Edit öffnen ausführen.
+7. Im Overlay fertig bearbeiten und Übernehmen in SVG-Crop anklicken.
+8. Speichern.
 
 ## Berechtigungen
 
 - svgcrop[]: Addon nutzen
 - svgcrop[overwrite]: bestehende SVG überschreiben
 - svgcrop[svg_edit]: SVG-Edit-Integration öffnen
+- svgcrop[settings]: Zugriff auf die svgcrop-Einstellungsseite
 
 ## Konfiguration
 
 - show_edit_in_list: SVG-Bearbeitungslink in der Medienliste ein-/ausblenden
 - svg_edit_url: Einstiegspunkt für die SVG-Edit-Integration (Standard ist das lokale Addon-Asset)
+- default_trim_padding: Standard-Padding für Trim- und Ratio-Aktionen
+- ratio_profiles_json: konfigurierbare Ratio-Profile mit Label, Breite, Höhe, Modus und Anker
+
+## Einstellungsseite
+
+- Versteckte Medienpool-Unterseite mit Zahnradzugriff
+- Gedacht für Administratoren oder Nutzer mit svgcrop[settings]
+- Hier lassen sich Link-Sichtbarkeit, SVG-Edit-URL, Default-Padding und mehrere Ratio-Profile pflegen
